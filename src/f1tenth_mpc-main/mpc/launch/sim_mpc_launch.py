@@ -1,0 +1,25 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    share_directory = os.path.join(
+        get_package_share_directory('mpc'),
+        'waypoints', '')
+    return LaunchDescription([
+        Node(
+            package='mpc',
+            executable='mpc_node.py',
+            name='mpc_node',
+            parameters=[
+                {
+                'waypoints_path' : share_directory + "Melbourne_map_mpc.csv",
+                'pose_topic': '/ego_racecar/odom'
+                }
+            ],
+            output='screen',
+        ),
+    ])
