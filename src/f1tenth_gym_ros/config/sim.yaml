@@ -49,14 +49,14 @@ bridge:
     num_agent: 2
 
     # ego starting pose on map
-    sx: -22.2974
-    sy: 29.5657
-    stheta: -1.5708
+    sx: -23.1983
+    sy: 22.1783
+    stheta: -0.787580
 
     # opp starting pose on map
-    sx1: -22.4775
-    sy1: 28.5747
-    stheta1: -1.6986
+    sx1: -21.9370
+    sy1: 20.9170
+    stheta1: -0.782731
 
     # teleop
     kb_teleop: True

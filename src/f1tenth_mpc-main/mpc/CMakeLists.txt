@@ -57,8 +57,10 @@ ament_python_install_package(${PROJECT_NAME})
 # Install Python executables
 install(PROGRAMS
   scripts/mpc_node.py
+  scripts/opp_pid_node.py
   scripts/opponent_ekf_tracker.py
   scripts/ego_ekf_follower.py
+  scripts/ego_mpc_follower.py
   scripts/utils.py
   scripts/waypoint_spline.py
   DESTINATION lib/${PROJECT_NAME}

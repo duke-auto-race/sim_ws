@@ -59,9 +59,9 @@ class mpc_config:
     MIN_STEER: float = -0.4189  # maximum steering angle [rad]
     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
     MAX_DSTEER: float = np.deg2rad(180.0)  # maximum steering speed [rad/s]
-    MAX_SPEED: float = 2.0  # maximum speed [m/s]
+    MAX_SPEED: float = 3.0  # maximum speed [m/s]
     MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
-    MAX_ACCEL: float = 0.8  # maximum acceleration [m/ss]
+    MAX_ACCEL: float = 1.0  # maximum acceleration [m/ss]
     # MAX_ERROR: float = 100  # maximum error placement to reference trajectory[m]
 
 @dataclass
