@@ -64,6 +64,12 @@ class EgoMPCFollower(Node):
         self.declare_parameter('wall_stop_distance', 0.45)
         self.declare_parameter('wall_slow_distance', 0.8)
         self.declare_parameter('side_wall_distance', 0.6)
+        self.declare_parameter('cbf_left_gamma', 3.0)
+        self.declare_parameter('cbf_right_gamma', 3.0)
+        self.declare_parameter('cbf_front_gamma', 2.0)
+        self.declare_parameter('cbf_steer_gain', 0.9)
+        self.declare_parameter('cbf_q_accel', 1.0)
+        self.declare_parameter('cbf_q_steer', 30.0)
 
         ego_topic = self.get_parameter('ego_odom_topic').value
         target_topic = self.get_parameter('target_odom_topic').value
@@ -79,6 +85,12 @@ class EgoMPCFollower(Node):
         self.wall_stop_distance = float(self.get_parameter('wall_stop_distance').value)
         self.wall_slow_distance = float(self.get_parameter('wall_slow_distance').value)
         self.side_wall_distance = float(self.get_parameter('side_wall_distance').value)
+        self.cbf_left_gamma = float(self.get_parameter('cbf_left_gamma').value)
+        self.cbf_right_gamma = float(self.get_parameter('cbf_right_gamma').value)
+        self.cbf_front_gamma = float(self.get_parameter('cbf_front_gamma').value)
+        self.cbf_steer_gain = float(self.get_parameter('cbf_steer_gain').value)
+        self.cbf_q_accel = float(self.get_parameter('cbf_q_accel').value)
+        self.cbf_q_steer = float(self.get_parameter('cbf_q_steer').value)
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, drive_topic, 10)
         self.pred_path_pub = self.create_publisher(Marker, '/ego_mpc_pred_path_vis', 1)
@@ -100,6 +112,55 @@ class EgoMPCFollower(Node):
         self.odelta = None
 
         self.mpc_prob_init()
+
+    def cbf_filter(self, accel_nom, steer_nom, speed, front_dist, left_dist, right_dist):
+        accel = cvxpy.Variable()
+        steer = cvxpy.Variable()
+        objective = cvxpy.Minimize(
+            self.cbf_q_accel * cvxpy.square(accel - accel_nom)
+            + self.cbf_q_steer * cvxpy.square(steer - steer_nom)
+        )
+
+        constraints = [
+            accel <= self.config.MAX_ACCEL,
+            accel >= -self.config.MAX_ACCEL,
+            steer <= self.config.MAX_STEER,
+            steer >= self.config.MIN_STEER,
+        ]
+
+        # Discrete-time CBF-style wall constraints:
+        # h_{k+1} - (1-gamma*dt) h_k >= 0
+        # Left/right barriers use steering as the dominant wall-approach input.
+        if math.isfinite(left_dist):
+            h_left = left_dist - self.side_wall_distance
+            constraints.append(self.cbf_left_gamma * h_left - self.cbf_steer_gain * steer >= 0.0)
+        if math.isfinite(right_dist):
+            h_right = right_dist - self.side_wall_distance
+            constraints.append(self.cbf_right_gamma * h_right + self.cbf_steer_gain * steer >= 0.0)
+
+        # Front barrier uses acceleration to prevent the vehicle from continuing
+        # to close into a wall when the frontal clearance is low.
+        if math.isfinite(front_dist):
+            h_front = front_dist - self.wall_stop_distance
+            constraints.append(
+                self.cbf_front_gamma * h_front
+                - self.config.DTK * speed
+                - (self.config.DTK ** 2) * accel
+                >= 0.0
+            )
+
+        problem = cvxpy.Problem(objective, constraints)
+        try:
+            problem.solve(solver=cvxpy.OSQP, warm_start=True, verbose=False)
+        except cvxpy.error.SolverError:
+            self.get_logger().warn('CBF QP solver failed, falling back to nominal control')
+            return accel_nom, steer_nom
+
+        if problem.status not in (cvxpy.OPTIMAL, cvxpy.OPTIMAL_INACCURATE):
+            self.get_logger().warn('CBF QP infeasible, falling back to nominal control')
+            return accel_nom, steer_nom
+
+        return float(accel.value), float(steer.value)
 
     def ego_callback(self, msg: Odometry) -> None:
         self.ego = msg
@@ -173,18 +234,23 @@ class EgoMPCFollower(Node):
             self.drive_pub.publish(drive)
             return
 
+        accel_cmd = float(self.oa[0])
         steer_cmd = float(self.odelta[0])
         front_dist = self.sector_min_distance(-12.0, 12.0)
         left_dist = self.sector_min_distance(20.0, 65.0)
         right_dist = self.sector_min_distance(-65.0, -20.0)
 
-        if left_dist < self.side_wall_distance and steer_cmd > 0.0:
-            steer_cmd *= max(0.0, left_dist / self.side_wall_distance)
-        if right_dist < self.side_wall_distance and steer_cmd < 0.0:
-            steer_cmd *= max(0.0, right_dist / self.side_wall_distance)
+        accel_cmd, steer_cmd = self.cbf_filter(
+            accel_cmd,
+            steer_cmd,
+            ego_state.v,
+            front_dist,
+            left_dist,
+            right_dist,
+        )
 
         drive.drive.steering_angle = steer_cmd
-        commanded_speed = ego_state.v + self.oa[0] * self.config.DTK
+        commanded_speed = ego_state.v + accel_cmd * self.config.DTK
         if gap_distance <= 0.8 or front_dist <= self.wall_stop_distance:
             drive.drive.speed = 0.0
         else:

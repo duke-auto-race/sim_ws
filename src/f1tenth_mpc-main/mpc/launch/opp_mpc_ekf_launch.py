@@ -33,6 +33,8 @@ def generate_launch_description():
                 'lidar_fov_deg': 180.0,
                 'min_cluster_width': 0.18,
                 'max_cluster_width': 0.66,
+                'min_cluster_points': 9,
+                'max_cluster_points': 100,
                 'association_gate': 0.7,
                 'output_topic': '/ego_racecar/opp_odom_ekf',
                 'output_pose_topic': '/ego_racecar/opp_odom_ekf_pose',

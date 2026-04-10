@@ -28,7 +28,8 @@ class OpponentEKFTracker(Node):
         self.declare_parameter('lidar_min_range', 0.2)
         self.declare_parameter('lidar_max_range', 8.0)
         self.declare_parameter('cluster_gap', 0.35)
-        self.declare_parameter('min_cluster_points', 3)
+        self.declare_parameter('min_cluster_points', 9)
+        self.declare_parameter('max_cluster_points', 100)
         self.declare_parameter('min_cluster_width', 0.05)
         self.declare_parameter('max_cluster_width', 0.75)
         self.declare_parameter('association_gate', 1.2)
@@ -59,6 +60,7 @@ class OpponentEKFTracker(Node):
         self.lidar_max_range = float(self.get_parameter('lidar_max_range').value)
         self.cluster_gap = float(self.get_parameter('cluster_gap').value)
         self.min_cluster_points = int(self.get_parameter('min_cluster_points').value)
+        self.max_cluster_points = int(self.get_parameter('max_cluster_points').value)
         self.min_cluster_width = float(self.get_parameter('min_cluster_width').value)
         self.max_cluster_width = float(self.get_parameter('max_cluster_width').value)
         self.association_gate = float(self.get_parameter('association_gate').value)
@@ -150,6 +152,8 @@ class OpponentEKFTracker(Node):
 
         candidates = []
         for cluster in clusters:
+            if len(cluster) > self.max_cluster_points:
+                continue
             cx = sum(p[0] for p in cluster) / len(cluster)
             cy = sum(p[1] for p in cluster) / len(cluster)
             distance = math.hypot(cx, cy)
